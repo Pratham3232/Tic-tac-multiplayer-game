@@ -8,7 +8,6 @@ import {
   OnGatewayDisconnect,
 } from '@nestjs/websockets';
 import { Server, Socket } from 'socket.io';
-import { UseGuards } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { GamesService } from '../games/games.service';
 import { UsersService } from '../users/users.service';
@@ -52,21 +51,14 @@ export class GameGateway implements OnGatewayConnection, OnGatewayDisconnect {
         username: user.username,
       });
 
-      // Update user's last seen
       await this.usersService.updateLastSeen(user.id);
-
-      // Join user to their personal room for direct notifications
       client.join(`user_${user.id}`);
 
-      console.log(`User ${user.username} connected with socket ${client.id}`);
-
-      // Notify about online status
       this.server.emit('userOnline', {
         userId: user.id,
         username: user.username,
       });
     } catch (error) {
-      console.error('Connection error:', error);
       client.disconnect();
     }
   }
@@ -74,10 +66,8 @@ export class GameGateway implements OnGatewayConnection, OnGatewayDisconnect {
   handleDisconnect(client: Socket) {
     const user = this.connectedUsers.get(client.id);
     if (user) {
-      console.log(`User ${user.username} disconnected`);
       this.connectedUsers.delete(client.id);
       
-      // Notify about offline status
       this.server.emit('userOffline', {
         userId: user.userId,
         username: user.username,
@@ -91,32 +81,20 @@ export class GameGateway implements OnGatewayConnection, OnGatewayDisconnect {
     @MessageBody() data: { gameId: string },
   ) {
     const user = this.connectedUsers.get(client.id);
-    if (!user) {
-      console.log('❌ joinGame: User not found');
-      return;
-    }
+    if (!user) return;
 
     try {
       const game = await this.gamesService.getGame(data.gameId);
       
-      // Join the game room
       client.join(`game_${data.gameId}`);
-      console.log(`✅ ${user.username} joined room: game_${data.gameId}`);
       
-      // Log room membership
-      const room = this.server.sockets.adapter.rooms.get(`game_${data.gameId}`);
-      console.log('👥 Clients in room after join:', room ? room.size : 0);
-      
-      // Notify other players in the game
       client.to(`game_${data.gameId}`).emit('playerJoined', {
         userId: user.userId,
         username: user.username,
       });
       
-      // Send current game state to the joining player
       client.emit('gameState', game);
     } catch (error) {
-      console.error('❌ Error in joinGame:', error.message);
       client.emit('error', { message: error.message });
     }
   }
@@ -131,7 +109,6 @@ export class GameGateway implements OnGatewayConnection, OnGatewayDisconnect {
 
     client.leave(`game_${data.gameId}`);
     
-    // Notify other players in the game
     client.to(`game_${data.gameId}`).emit('playerLeft', {
       userId: user.userId,
       username: user.username,
@@ -144,12 +121,7 @@ export class GameGateway implements OnGatewayConnection, OnGatewayDisconnect {
     @MessageBody() data: { gameId: string; move: any },
   ) {
     const user = this.connectedUsers.get(client.id);
-    if (!user) {
-      console.log('❌ makeMove: User not found');
-      return;
-    }
-
-    console.log('📥 makeMove received:', { gameId: data.gameId, move: data.move, user: user.username });
+    if (!user) return;
 
     try {
       const updatedGame = await this.gamesService.makeMove(
@@ -158,26 +130,17 @@ export class GameGateway implements OnGatewayConnection, OnGatewayDisconnect {
         user.userId,
       );
       
-      // Get fully populated game
       const populatedGame = await this.gamesService.getGame(data.gameId);
       
-      console.log('✅ Move processed, broadcasting to room: game_' + data.gameId);
-      const room = this.server.sockets.adapter.rooms.get(`game_${data.gameId}`);
-      console.log('👥 Clients in room:', room ? room.size : 0);
-      
-      // Broadcast to ALL players in room (using .in() includes sender)
       this.server.in(`game_${data.gameId}`).emit('gameUpdated', populatedGame);
       
-      // If game ended, broadcast the result
       if (populatedGame.status === 'completed') {
-        console.log('🏁 Game ended:', populatedGame.result);
         this.server.in(`game_${data.gameId}`).emit('gameEnded', {
           result: populatedGame.result,
           winner: populatedGame.winner,
         });
       }
     } catch (error) {
-      console.error('❌ Error in makeMove:', error.message);
       client.emit('error', { message: error.message });
     }
   }
@@ -197,7 +160,6 @@ export class GameGateway implements OnGatewayConnection, OnGatewayDisconnect {
       timestamp: new Date(),
     };
 
-    // Broadcast the message to all players in the game
     this.server.to(`game_${data.gameId}`).emit('newMessage', chatMessage);
   }
 
@@ -209,7 +171,6 @@ export class GameGateway implements OnGatewayConnection, OnGatewayDisconnect {
     const user = this.connectedUsers.get(client.id);
     if (!user) return;
 
-    // Notify the opponent about the draw request
     client.to(`game_${data.gameId}`).emit('drawRequested', {
       fromUserId: user.userId,
       fromUsername: user.username,
@@ -225,11 +186,8 @@ export class GameGateway implements OnGatewayConnection, OnGatewayDisconnect {
     if (!user) return;
 
     if (data.accepted) {
-      // Handle draw acceptance - update game status
       this.server.to(`game_${data.gameId}`).emit('drawAccepted');
-      // You would also update the game in the database here
     } else {
-      // Notify that draw was declined
       client.to(`game_${data.gameId}`).emit('drawDeclined', {
         byUserId: user.userId,
         byUsername: user.username,
@@ -237,12 +195,10 @@ export class GameGateway implements OnGatewayConnection, OnGatewayDisconnect {
     }
   }
 
-  // Method to send notifications to specific users
   async sendNotificationToUser(userId: string, notification: any) {
     this.server.to(`user_${userId}`).emit('notification', notification);
   }
 
-  // Method to broadcast game updates
   async broadcastGameUpdate(gameId: string, update: any) {
     this.server.to(`game_${gameId}`).emit('gameUpdated', update);
   }

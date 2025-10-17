@@ -68,7 +68,6 @@ export class GamesService {
       throw new BadRequestException('Game is not in progress');
     }
     
-    // Determine player's color
     const playerColor = game.whitePlayer.toString() === playerId ? PieceColor.WHITE : PieceColor.BLACK;
     
     if (game.blackPlayer?.toString() !== playerId && game.whitePlayer.toString() !== playerId) {
@@ -79,7 +78,6 @@ export class GamesService {
       throw new BadRequestException('It is not your turn');
     }
     
-    // Parse current board state
     let board: (string | null)[];
     try {
       board = JSON.parse(game.currentPosition);
@@ -87,10 +85,7 @@ export class GamesService {
       board = Array(9).fill(null);
     }
     
-    // Get the cell index from the move (using 'to' field as the index)
     const cellIndex = parseInt(makeMoveDto.to);
-    
-    console.log('📥 Processing move:', { gameId, cellIndex, currentBoard: board });
     
     if (isNaN(cellIndex) || cellIndex < 0 || cellIndex > 8) {
       throw new BadRequestException('Invalid cell index');
@@ -100,13 +95,10 @@ export class GamesService {
       throw new BadRequestException('Cell is already occupied');
     }
     
-    // Determine symbol (X for white/first player, O for black/second player)
     const symbol = playerColor === PieceColor.WHITE ? 'X' : 'O';
     
-    // Place the symbol on the board
     board[cellIndex] = symbol;
     
-    // Create the move record
     const move: Move = {
       from: makeMoveDto.from,
       to: makeMoveDto.to,
@@ -120,13 +112,9 @@ export class GamesService {
       isEnPassant: false,
     };
     
-    // Add move to game
     game.moves.push(move);
-    
-    // Update board position
     game.currentPosition = JSON.stringify(board);
     
-    // Check for win condition
     const winResult = this.checkWin(board);
     if (winResult.winner) {
       game.status = GameStatus.COMPLETED;
@@ -134,7 +122,6 @@ export class GamesService {
       game.winner = playerId as any;
       game.endedAt = new Date();
       
-      // Update ratings: winner +200, loser -100 (min 0)
       const winnerId = playerId;
       const loserId = winnerId === game.whitePlayer.toString() 
         ? game.blackPlayer?.toString() 
@@ -148,9 +135,7 @@ export class GamesService {
       game.status = GameStatus.COMPLETED;
       game.result = GameResult.DRAW;
       game.endedAt = new Date();
-      // No rating change for draws
     } else {
-      // Switch turns
       game.currentTurn = game.currentTurn === PieceColor.WHITE ? PieceColor.BLACK : PieceColor.WHITE;
     }
     
@@ -158,16 +143,15 @@ export class GamesService {
   }
 
   private checkWin(board: (string | null)[]): { winner: string | null; draw: boolean } {
-    // Check all winning combinations
     const winPatterns = [
-      [0, 1, 2], // Top row
-      [3, 4, 5], // Middle row
-      [6, 7, 8], // Bottom row
-      [0, 3, 6], // Left column
-      [1, 4, 7], // Middle column
-      [2, 5, 8], // Right column
-      [0, 4, 8], // Diagonal \
-      [2, 4, 6], // Diagonal /
+      [0, 1, 2],
+      [3, 4, 5],
+      [6, 7, 8],
+      [0, 3, 6],
+      [1, 4, 7],
+      [2, 5, 8],
+      [0, 4, 8],
+      [2, 4, 6],
     ];
     
     for (const pattern of winPatterns) {
@@ -177,7 +161,6 @@ export class GamesService {
       }
     }
     
-    // Check for draw (all cells filled, no winner)
     const isFull = board.every(cell => cell !== null);
     if (isFull) {
       return { winner: null, draw: true };
@@ -204,7 +187,7 @@ export class GamesService {
     return this.gameModel
       .find({ 
         status: GameStatus.WAITING,
-        isRandomMatch: { $ne: true } // Exclude random match queue games
+        isRandomMatch: { $ne: true }
       })
       .populate('whitePlayer', 'username rating')
       .sort({ createdAt: -1 })
@@ -241,13 +224,12 @@ export class GamesService {
     const currentUser = await this.usersService.findById(userId);
     const userRating = currentUser.rating || 1200;
 
-    // Step 1: Look for existing random match waiting games within rating range
     const waitingGame = await this.gameModel
       .findOne({
         status: GameStatus.WAITING,
         isRandomMatch: true,
         blackPlayer: null,
-        whitePlayer: { $ne: userId }, // Not the same user
+        whitePlayer: { $ne: userId },
       })
       .populate('whitePlayer', 'username rating')
       .exec();
@@ -257,17 +239,12 @@ export class GamesService {
         ? (waitingGame.whitePlayer as any).rating || 1200 
         : 1200;
 
-      // Check if opponent is within ±100 rating range
       if (Math.abs(userRating - opponentRating) <= 100) {
-        // Perfect match found! Join this game
         const gameId = (waitingGame as any)._id.toString();
-        console.log(`🎯 Matched ${currentUser.username} (${userRating}) with opponent (${opponentRating})`);
         return this.joinGame(gameId, userId);
       }
     }
 
-    // Step 2: No suitable match found, create a waiting game for others to join
-    console.log(`⏳ No match found for ${currentUser.username} (${userRating}), creating waiting game...`);
     const game = new this.gameModel({
       gameName: 'Random Match',
       isRandomMatch: true,
@@ -303,7 +280,6 @@ export class GamesService {
     game.status = GameStatus.ABANDONED;
     game.endedAt = new Date();
     
-    // Determine winner (the other player)
     if (game.whitePlayer.toString() === playerId) {
       game.result = GameResult.BLACK_WINS;
       game.winner = game.blackPlayer as any;

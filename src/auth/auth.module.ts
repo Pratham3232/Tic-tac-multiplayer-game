@@ -17,8 +17,6 @@ import { User, UserSchema } from '../schemas/user.schema';
       useFactory: async (configService: ConfigService): Promise<JwtModuleOptions> => {
         const secret = configService.get<string>('jwt.secret') || configService.get<string>('JWT_SECRET') || 'your-super-secret-jwt-key-change-this-in-production';
         const expiresIn = configService.get<string>('jwt.expiresIn') || configService.get<string>('JWT_EXPIRES_IN') || '7d';
-        console.log('JWT Module configured with secret:', secret ? '***' + secret.slice(-4) : 'MISSING');
-        console.log('JWT Module expiresIn:', expiresIn);
         return {
           secret,
           signOptions: { expiresIn },

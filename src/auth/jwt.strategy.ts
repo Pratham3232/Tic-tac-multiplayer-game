@@ -17,7 +17,6 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
     private usersService: UsersService,
   ) {
     const jwtSecret = configService.get<string>('jwt.secret') || configService.get<string>('JWT_SECRET') || 'your-super-secret-jwt-key-change-this-in-production';
-    console.log('JWT Strategy initialized with secret:', jwtSecret ? '***' + jwtSecret.slice(-4) : 'MISSING');
     
     super({
       jwtFromRequest: ExtractJwt.fromAuthHeaderAsBearerToken(),
@@ -27,9 +26,7 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
   }
 
   async validate(payload: JwtPayload) {
-    console.log('JWT Validate called with payload:', payload);
     const user = await this.usersService.findById(payload.sub);
-    console.log('User found:', user ? user.username : 'NOT FOUND');
     if (!user) {
       throw new Error('User not found for JWT payload');
     }

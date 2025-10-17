@@ -7,12 +7,11 @@ async function bootstrap() {
   const app = await NestFactory.create(AppModule);
   const configService = app.get(ConfigService);
 
-  // Enable CORS for frontend access
   app.enableCors({
     origin: [
-      'http://localhost:5173', // Vite default
-      'http://localhost:3001', // Next.js default
-      'http://localhost:3000', // Create React App default
+      'http://localhost:5173',
+      'http://localhost:3001',
+      'http://localhost:3000',
       configService.get('app.corsOrigin'),
     ].filter(Boolean),
     credentials: true,
@@ -20,7 +19,6 @@ async function bootstrap() {
     allowedHeaders: ['Content-Type', 'Authorization'],
   });
 
-  // Swagger Documentation
   const config = new DocumentBuilder()
     .setTitle('Lila Game API')
     .setDescription('A comprehensive game backend API for chess-like games')
