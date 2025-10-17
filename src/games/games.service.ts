@@ -56,7 +56,6 @@ export class GamesService {
     game.blackPlayer = blackPlayerId as any;
     game.status = GameStatus.IN_PROGRESS;
     game.startedAt = new Date();
-    console.log('🎮 makeMove called:', { gameId, playerId, moveData: makeMoveDto });
     
     return game.save();
   }
@@ -89,12 +88,12 @@ export class GamesService {
       board = JSON.parse(game.currentPosition);
     } catch (error) {
       board = Array(9).fill(null);
-    
-    console.log('📊 Board state:', { currentBoard: board, cellIndex, symbol, playerColor });
     }
     
     // Get the cell index from the move (using 'to' field as the index)
     const cellIndex = parseInt(makeMoveDto.to);
+    
+    console.log('📥 Processing move:', { gameId, cellIndex, currentBoard: board });
     
     if (isNaN(cellIndex) || cellIndex < 0 || cellIndex > 8) {
       throw new BadRequestException('Invalid cell index');

@@ -91,13 +91,21 @@ export class GameGateway implements OnGatewayConnection, OnGatewayDisconnect {
     @MessageBody() data: { gameId: string },
   ) {
     const user = this.connectedUsers.get(client.id);
-    if (!user) return;
+    if (!user) {
+      console.log('❌ joinGame: User not found');
+      return;
+    }
 
     try {
       const game = await this.gamesService.getGame(data.gameId);
       
       // Join the game room
       client.join(`game_${data.gameId}`);
+      console.log(`✅ ${user.username} joined room: game_${data.gameId}`);
+      
+      // Log room membership
+      const room = this.server.sockets.adapter.rooms.get(`game_${data.gameId}`);
+      console.log('👥 Clients in room after join:', room ? room.size : 0);
       
       // Notify other players in the game
       client.to(`game_${data.gameId}`).emit('playerJoined', {
@@ -108,6 +116,7 @@ export class GameGateway implements OnGatewayConnection, OnGatewayDisconnect {
       // Send current game state to the joining player
       client.emit('gameState', game);
     } catch (error) {
+      console.error('❌ Error in joinGame:', error.message);
       client.emit('error', { message: error.message });
     }
   }
@@ -129,12 +138,46 @@ export class GameGateway implements OnGatewayConnection, OnGatewayDisconnect {
     });
   }
 
-  @SubscribeMessage`cat /tmp/gateway_update.ts``).emit('gameEnded', {
-          result: updatedGame.result,
-          winner: updatedGame.winner,
+  @SubscribeMessage('makeMove')
+  async handleMakeMove(
+    @ConnectedSocket() client: Socket,
+    @MessageBody() data: { gameId: string; move: any },
+  ) {
+    const user = this.connectedUsers.get(client.id);
+    if (!user) {
+      console.log('❌ makeMove: User not found');
+      return;
+    }
+
+    console.log('📥 makeMove received:', { gameId: data.gameId, move: data.move, user: user.username });
+
+    try {
+      const updatedGame = await this.gamesService.makeMove(
+        data.gameId,
+        data.move,
+        user.userId,
+      );
+      
+      // Get fully populated game
+      const populatedGame = await this.gamesService.getGame(data.gameId);
+      
+      console.log('✅ Move processed, broadcasting to room: game_' + data.gameId);
+      const room = this.server.sockets.adapter.rooms.get(`game_${data.gameId}`);
+      console.log('👥 Clients in room:', room ? room.size : 0);
+      
+      // Broadcast to ALL players in room (using .in() includes sender)
+      this.server.in(`game_${data.gameId}`).emit('gameUpdated', populatedGame);
+      
+      // If game ended, broadcast the result
+      if (populatedGame.status === 'completed') {
+        console.log('🏁 Game ended:', populatedGame.result);
+        this.server.in(`game_${data.gameId}`).emit('gameEnded', {
+          result: populatedGame.result,
+          winner: populatedGame.winner,
         });
       }
     } catch (error) {
+      console.error('❌ Error in makeMove:', error.message);
       client.emit('error', { message: error.message });
     }
   }
