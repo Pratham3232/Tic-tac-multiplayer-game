@@ -74,6 +74,12 @@ export const MoveSchema = SchemaFactory.createForClass(Move);
 
 @Schema({ timestamps: true })
 export class Game {
+  @Prop({ type: String })
+  gameName?: string;
+
+  @Prop({ type: Boolean, default: false })
+  isRandomMatch?: boolean;
+
   @Prop({ required: true, type: Types.ObjectId, ref: 'User' })
   whitePlayer: Types.ObjectId;
 

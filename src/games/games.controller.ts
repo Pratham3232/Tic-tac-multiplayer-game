@@ -95,8 +95,26 @@ export class GamesController {
     description: 'List of active games',
     type: [GameResponseDto],
   })
-  async getActiveGames() {
+  async getActiveGames(@Query('search') search?: string) {
+    if (search) {
+      return this.gamesService.searchGamesByName(search);
+    }
     return this.gamesService.getActiveGames();
+  }
+
+  @Post('random-match')
+  @ApiOperation({ summary: 'Find and join a random match with similar rating' })
+  @ApiResponse({
+    status: 200,
+    description: 'Random match found or created',
+    type: GameResponseDto,
+  })
+  @ApiResponse({
+    status: 404,
+    description: 'No suitable opponent found',
+  })
+  async findRandomMatch(@Request() req) {
+    return this.gamesService.findRandomMatch(req.user.id);
   }
 
   @Get('user/history')

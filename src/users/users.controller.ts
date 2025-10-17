@@ -6,6 +6,7 @@ import {
   Patch,
   Body,
   Param,
+  Query,
   UseGuards,
   Request,
 } from '@nestjs/common';
@@ -41,6 +42,18 @@ export class UsersController {
   })
   async updateProfile(@Body() updateUserDto: UpdateUserDto, @Request() req) {
     return this.usersService.update(req.user.id, updateUserDto);
+  }
+
+  @Get('leaderboard')
+  @ApiOperation({ summary: 'Get top players leaderboard' })
+  @ApiResponse({
+    status: 200,
+    description: 'Leaderboard retrieved successfully',
+    type: [UserResponseDto],
+  })
+  async getLeaderboard(@Query('limit') limit?: string) {
+    const limitNum = limit ? parseInt(limit) : 5;
+    return this.usersService.getLeaderboard(limitNum);
   }
 
   @Get(':id')

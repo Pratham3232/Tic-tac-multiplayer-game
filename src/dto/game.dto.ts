@@ -4,6 +4,15 @@ import { PieceType, PieceColor, GameStatus, GameResult } from '../schemas/game.s
 
 export class CreateGameDto {
   @ApiProperty({
+    description: 'Optional name for the game',
+    example: 'Quick Match',
+    required: false,
+  })
+  @IsOptional()
+  @IsString()
+  gameName?: string;
+
+  @ApiProperty({
     description: 'Initial time control in minutes',
     example: 10,
     minimum: 1,
@@ -113,6 +122,9 @@ export class MoveResponseDto {
 export class GameResponseDto {
   @ApiProperty()
   id: string;
+
+  @ApiProperty({ required: false })
+  gameName?: string;
 
   @ApiProperty()
   whitePlayer: string;

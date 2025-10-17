@@ -4,31 +4,28 @@ import { Model } from 'mongoose';
 import { Game, GameDocument, GameStatus, GameResult, PieceColor, Move } from '../schemas/game.schema';
 import { User, UserDocument } from '../schemas/user.schema';
 import { CreateGameDto, MakeMoveDto } from '../dto/game.dto';
+import { UsersService } from '../users/users.service';
 
 @Injectable()
 export class GamesService {
   constructor(
     @InjectModel(Game.name) private gameModel: Model<GameDocument>,
     @InjectModel(User.name) private userModel: Model<UserDocument>,
+    private usersService: UsersService,
   ) {}
 
   async createGame(createGameDto: CreateGameDto, whitePlayerId: string): Promise<GameDocument> {
-    const timeControlMinutes = createGameDto.timeControlMinutes || 10;
-    const timeIncrementSeconds = createGameDto.timeIncrementSeconds || 0;
-    
-    const timeControlInitial = timeControlMinutes * 60 * 1000; // Convert to milliseconds
-    const timeControlIncrement = timeIncrementSeconds * 1000; // Convert to milliseconds
-    
-    // Initialize empty tic-tac-toe board (9 cells, all null)
-    const initialBoard = JSON.stringify(Array(9).fill(null));
-    
     const game = new this.gameModel({
+      gameName: createGameDto.gameName,
       whitePlayer: whitePlayerId,
-      timeControlInitial,
-      timeControlIncrement,
-      whiteTimeRemaining: timeControlInitial,
-      blackTimeRemaining: timeControlInitial,
-      currentPosition: initialBoard,
+      status: GameStatus.WAITING,
+      result: GameResult.ONGOING,
+      currentPosition: JSON.stringify(Array(9).fill(null)),
+      currentTurn: PieceColor.WHITE,
+      timeControlInitial: (createGameDto.timeControlMinutes || 10) * 60 * 1000,
+      timeControlIncrement: (createGameDto.timeIncrementSeconds || 0) * 1000,
+      whiteTimeRemaining: (createGameDto.timeControlMinutes || 10) * 60 * 1000,
+      blackTimeRemaining: (createGameDto.timeControlMinutes || 10) * 60 * 1000,
     });
     
     return game.save();
@@ -136,10 +133,22 @@ export class GamesService {
       game.result = winResult.winner === 'X' ? GameResult.WHITE_WINS : GameResult.BLACK_WINS;
       game.winner = playerId as any;
       game.endedAt = new Date();
+      
+      // Update ratings: winner +200, loser -100 (min 0)
+      const winnerId = playerId;
+      const loserId = winnerId === game.whitePlayer.toString() 
+        ? game.blackPlayer?.toString() 
+        : game.whitePlayer.toString();
+      
+      await this.usersService.updateRating(winnerId, 200);
+      if (loserId) {
+        await this.usersService.updateRating(loserId, -100);
+      }
     } else if (winResult.draw) {
       game.status = GameStatus.COMPLETED;
       game.result = GameResult.DRAW;
       game.endedAt = new Date();
+      // No rating change for draws
     } else {
       // Switch turns
       game.currentTurn = game.currentTurn === PieceColor.WHITE ? PieceColor.BLACK : PieceColor.WHITE;
@@ -193,26 +202,87 @@ export class GamesService {
 
   async getActiveGames(): Promise<GameDocument[]> {
     return this.gameModel
-      .find({ status: GameStatus.WAITING })
+      .find({ 
+        status: GameStatus.WAITING,
+        isRandomMatch: { $ne: true } // Exclude random match queue games
+      })
       .populate('whitePlayer', 'username rating')
       .sort({ createdAt: -1 })
       .limit(20)
       .exec();
   }
 
-  async getUserGames(userId: string, limit = 10): Promise<GameDocument[]> {
+  async getUserGames(userId: string, limit: number = 20): Promise<GameDocument[]> {
     return this.gameModel
       .find({
-        $or: [
-          { whitePlayer: userId },
-          { blackPlayer: userId },
-        ],
+        $or: [{ whitePlayer: userId }, { blackPlayer: userId }],
+        status: { $in: [GameStatus.COMPLETED, GameStatus.ABANDONED] }
       })
       .populate('whitePlayer', 'username rating')
       .populate('blackPlayer', 'username rating')
       .sort({ createdAt: -1 })
       .limit(limit)
       .exec();
+  }
+
+  async searchGamesByName(searchTerm: string): Promise<GameDocument[]> {
+    return this.gameModel
+      .find({
+        gameName: { $regex: searchTerm, $options: 'i' },
+        status: GameStatus.WAITING
+      })
+      .populate('whitePlayer', 'username rating')
+      .populate('blackPlayer', 'username rating')
+      .sort({ createdAt: -1 })
+      .exec();
+  }
+
+  async findRandomMatch(userId: string): Promise<GameDocument> {
+    const currentUser = await this.usersService.findById(userId);
+    const userRating = currentUser.rating || 1200;
+
+    // Step 1: Look for existing random match waiting games within rating range
+    const waitingGame = await this.gameModel
+      .findOne({
+        status: GameStatus.WAITING,
+        isRandomMatch: true,
+        blackPlayer: null,
+        whitePlayer: { $ne: userId }, // Not the same user
+      })
+      .populate('whitePlayer', 'username rating')
+      .exec();
+
+    if (waitingGame) {
+      const opponentRating = typeof waitingGame.whitePlayer === 'object' 
+        ? (waitingGame.whitePlayer as any).rating || 1200 
+        : 1200;
+
+      // Check if opponent is within ±100 rating range
+      if (Math.abs(userRating - opponentRating) <= 100) {
+        // Perfect match found! Join this game
+        const gameId = (waitingGame as any)._id.toString();
+        console.log(`🎯 Matched ${currentUser.username} (${userRating}) with opponent (${opponentRating})`);
+        return this.joinGame(gameId, userId);
+      }
+    }
+
+    // Step 2: No suitable match found, create a waiting game for others to join
+    console.log(`⏳ No match found for ${currentUser.username} (${userRating}), creating waiting game...`);
+    const game = new this.gameModel({
+      gameName: 'Random Match',
+      isRandomMatch: true,
+      whitePlayer: userId,
+      status: GameStatus.WAITING,
+      result: GameResult.ONGOING,
+      currentPosition: JSON.stringify(Array(9).fill(null)),
+      currentTurn: PieceColor.WHITE,
+      timeControlInitial: 10 * 60 * 1000,
+      timeControlIncrement: 0,
+      whiteTimeRemaining: 10 * 60 * 1000,
+      blackTimeRemaining: 10 * 60 * 1000,
+    });
+
+    return game.save();
   }
 
   async abandonGame(gameId: string, playerId: string): Promise<GameDocument> {

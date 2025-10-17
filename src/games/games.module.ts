@@ -4,6 +4,7 @@ import { GamesService } from './games.service';
 import { GamesController } from './games.controller';
 import { Game, GameSchema } from '../schemas/game.schema';
 import { User, UserSchema } from '../schemas/user.schema';
+import { UsersModule } from '../users/users.module';
 
 @Module({
   imports: [
@@ -11,6 +12,7 @@ import { User, UserSchema } from '../schemas/user.schema';
       { name: Game.name, schema: GameSchema },
       { name: User.name, schema: UserSchema },
     ]),
+    UsersModule,
   ],
   controllers: [GamesController],
   providers: [GamesService],

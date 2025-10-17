@@ -79,6 +79,46 @@ export class UsersService {
     await this.userModel.findByIdAndUpdate(id, updateObj).exec();
   }
 
+  async updateRating(id: string, ratingChange: number): Promise<void> {
+    const user = await this.userModel.findById(id).exec();
+    if (!user) return;
+    
+    // Calculate new rating with minimum of 0
+    const newRating = Math.max(0, (user.rating || 1200) + ratingChange);
+    
+    await this.userModel.findByIdAndUpdate(id, { rating: newRating }).exec();
+  }
+
+  async findRandomOpponent(userId: string, ratingRange: number = 100): Promise<UserDocument | null> {
+    const currentUser = await this.findById(userId);
+    const userRating = currentUser.rating || 1200;
+    
+    // Find users within rating range (±100) who are active
+    const opponents = await this.userModel.find({
+      _id: { $ne: userId },
+      rating: {
+        $gte: userRating - ratingRange,
+        $lte: userRating + ratingRange
+      },
+      isActive: true
+    }).exec();
+    
+    if (opponents.length === 0) return null;
+    
+    // Return random opponent
+    const randomIndex = Math.floor(Math.random() * opponents.length);
+    return opponents[randomIndex];
+  }
+
+  async getLeaderboard(limit: number = 5): Promise<UserDocument[]> {
+    return this.userModel
+      .find()
+      .sort({ rating: -1 })
+      .limit(limit)
+      .select('username rating gamesPlayed gamesWon gamesLost gamesDrawn')
+      .exec();
+  }
+
   async addFriend(userId: string, friendId: string): Promise<void> {
     await this.userModel.findByIdAndUpdate(
       userId,
