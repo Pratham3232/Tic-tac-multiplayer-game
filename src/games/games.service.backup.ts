@@ -19,16 +19,12 @@ export class GamesService {
     const timeControlInitial = timeControlMinutes * 60 * 1000; // Convert to milliseconds
     const timeControlIncrement = timeIncrementSeconds * 1000; // Convert to milliseconds
     
-    // Initialize empty tic-tac-toe board (9 cells, all null)
-    const initialBoard = JSON.stringify(Array(9).fill(null));
-    
     const game = new this.gameModel({
       whitePlayer: whitePlayerId,
       timeControlInitial,
       timeControlIncrement,
       whiteTimeRemaining: timeControlInitial,
       blackTimeRemaining: timeControlInitial,
-      currentPosition: initialBoard,
     });
     
     return game.save();
@@ -56,12 +52,11 @@ export class GamesService {
     game.blackPlayer = blackPlayerId as any;
     game.status = GameStatus.IN_PROGRESS;
     game.startedAt = new Date();
-    console.log('🎮 makeMove called:', { gameId, playerId, moveData: makeMoveDto });
     
     return game.save();
   }
 
-  async makeMove(gameId: string, makeMoveDto: any, playerId: string): Promise<GameDocument> {
+  async makeMove(gameId: string, makeMoveDto: MakeMoveDto, playerId: string): Promise<GameDocument> {
     const game = await this.gameModel.findById(gameId).exec();
     
     if (!game) {
@@ -83,99 +78,44 @@ export class GamesService {
       throw new BadRequestException('It is not your turn');
     }
     
-    // Parse current board state
-    let board: (string | null)[];
-    try {
-      board = JSON.parse(game.currentPosition);
-    } catch (error) {
-      board = Array(9).fill(null);
-    
-    console.log('📊 Board state:', { currentBoard: board, cellIndex, symbol, playerColor });
-    }
-    
-    // Get the cell index from the move (using 'to' field as the index)
-    const cellIndex = parseInt(makeMoveDto.to);
-    
-    if (isNaN(cellIndex) || cellIndex < 0 || cellIndex > 8) {
-      throw new BadRequestException('Invalid cell index');
-    }
-    
-    if (board[cellIndex]) {
-      throw new BadRequestException('Cell is already occupied');
-    }
-    
-    // Determine symbol (X for white/first player, O for black/second player)
-    const symbol = playerColor === PieceColor.WHITE ? 'X' : 'O';
-    
-    // Place the symbol on the board
-    board[cellIndex] = symbol;
-    
-    // Create the move record
+    // Create the move (this is a simplified version - in a real chess game, you'd validate the move)
     const move: Move = {
       from: makeMoveDto.from,
       to: makeMoveDto.to,
-      piece: symbol as any,
+      piece: makeMoveDto.piece,
       color: playerColor,
-      algebraicNotation: `${symbol} → Cell ${cellIndex + 1}`,
+      algebraicNotation: `${makeMoveDto.piece === 'pawn' ? '' : makeMoveDto.piece.charAt(0).toUpperCase()}${makeMoveDto.to}`,
       timestamp: new Date(),
-      isCheck: false,
-      isCheckmate: false,
-      isCastling: false,
-      isEnPassant: false,
+      isCheck: false, // Would be calculated based on game logic
+      isCheckmate: false, // Would be calculated based on game logic
+      isCastling: false, // Would be detected based on move
+      isEnPassant: false, // Would be detected based on move
+      promotion: makeMoveDto.promotion,
     };
     
     // Add move to game
     game.moves.push(move);
     
-    // Update board position
-    game.currentPosition = JSON.stringify(board);
+    // Switch turns
+    game.currentTurn = game.currentTurn === PieceColor.WHITE ? PieceColor.BLACK : PieceColor.WHITE;
     
-    // Check for win condition
-    const winResult = this.checkWin(board);
-    if (winResult.winner) {
+    // Update position (simplified - in a real game, this would be calculated)
+    // For now, we'll just increment the move counter in FEN
+    const fenParts = game.currentPosition.split(' ');
+    const fullMoveNumber = parseInt(fenParts[5]) + (playerColor === PieceColor.BLACK ? 1 : 0);
+    fenParts[1] = game.currentTurn === PieceColor.WHITE ? 'w' : 'b';
+    fenParts[5] = fullMoveNumber.toString();
+    game.currentPosition = fenParts.join(' ');
+    
+    // Check for game end conditions (simplified)
+    if (move.isCheckmate) {
       game.status = GameStatus.COMPLETED;
-      game.result = winResult.winner === 'X' ? GameResult.WHITE_WINS : GameResult.BLACK_WINS;
+      game.result = playerColor === PieceColor.WHITE ? GameResult.WHITE_WINS : GameResult.BLACK_WINS;
       game.winner = playerId as any;
       game.endedAt = new Date();
-    } else if (winResult.draw) {
-      game.status = GameStatus.COMPLETED;
-      game.result = GameResult.DRAW;
-      game.endedAt = new Date();
-    } else {
-      // Switch turns
-      game.currentTurn = game.currentTurn === PieceColor.WHITE ? PieceColor.BLACK : PieceColor.WHITE;
     }
     
     return game.save();
-  }
-
-  private checkWin(board: (string | null)[]): { winner: string | null; draw: boolean } {
-    // Check all winning combinations
-    const winPatterns = [
-      [0, 1, 2], // Top row
-      [3, 4, 5], // Middle row
-      [6, 7, 8], // Bottom row
-      [0, 3, 6], // Left column
-      [1, 4, 7], // Middle column
-      [2, 5, 8], // Right column
-      [0, 4, 8], // Diagonal \
-      [2, 4, 6], // Diagonal /
-    ];
-    
-    for (const pattern of winPatterns) {
-      const [a, b, c] = pattern;
-      if (board[a] && board[a] === board[b] && board[a] === board[c]) {
-        return { winner: board[a], draw: false };
-      }
-    }
-    
-    // Check for draw (all cells filled, no winner)
-    const isFull = board.every(cell => cell !== null);
-    if (isFull) {
-      return { winner: null, draw: true };
-    }
-    
-    return { winner: null, draw: false };
   }
 
   async getGame(gameId: string): Promise<GameDocument> {

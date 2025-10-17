@@ -7,14 +7,18 @@ async function bootstrap() {
   const app = await NestFactory.create(AppModule);
   const configService = app.get(ConfigService);
 
-  // Enable CORS
+  // Enable CORS for frontend access
   app.enableCors({
-    origin: configService.get('app.corsOrigin'),
+    origin: [
+      'http://localhost:5173', // Vite default
+      'http://localhost:3001', // Next.js default
+      'http://localhost:3000', // Create React App default
+      configService.get('app.corsOrigin'),
+    ].filter(Boolean),
     credentials: true,
+    methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization'],
   });
-
-  // Global prefix for API
-  app.setGlobalPrefix('api');
 
   // Swagger Documentation
   const config = new DocumentBuilder()

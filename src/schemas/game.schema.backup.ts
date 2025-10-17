@@ -34,13 +34,13 @@ export enum PieceColor {
 @Schema()
 export class Move {
   @Prop({ required: true })
-  from: string; // For tic-tac-toe: cell index as string
+  from: string; // e.g., 'e2'
 
   @Prop({ required: true })
-  to: string; // For tic-tac-toe: cell index as string
+  to: string; // e.g., 'e4'
 
-  @Prop({ required: true })
-  piece: string; // For tic-tac-toe: 'X' or 'O'
+  @Prop({ required: true, enum: PieceType })
+  piece: PieceType;
 
   @Prop({ required: true, enum: PieceColor })
   color: PieceColor;
@@ -64,7 +64,7 @@ export class Move {
   promotion?: PieceType;
 
   @Prop({ required: true })
-  algebraicNotation: string; // For tic-tac-toe: 'X → Cell 1', etc.
+  algebraicNotation: string; // e.g., 'e4', 'Nf3', 'O-O'
 
   @Prop({ default: Date.now })
   timestamp: Date;
@@ -89,8 +89,8 @@ export class Game {
   @Prop({ type: [MoveSchema], default: [] })
   moves: Move[];
 
-  @Prop({ required: true, default: '[]' })
-  currentPosition: string; // JSON array of 9 cells for tic-tac-toe
+  @Prop({ required: true, default: 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1' })
+  currentPosition: string; // FEN notation
 
   @Prop({ required: true, enum: PieceColor, default: PieceColor.WHITE })
   currentTurn: PieceColor;

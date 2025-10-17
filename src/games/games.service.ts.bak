@@ -89,8 +89,6 @@ export class GamesService {
       board = JSON.parse(game.currentPosition);
     } catch (error) {
       board = Array(9).fill(null);
-    
-    console.log('📊 Board state:', { currentBoard: board, cellIndex, symbol, playerColor });
     }
     
     // Get the cell index from the move (using 'to' field as the index)

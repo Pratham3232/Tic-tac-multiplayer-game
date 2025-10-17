@@ -129,7 +129,27 @@ export class GameGateway implements OnGatewayConnection, OnGatewayDisconnect {
     });
   }
 
-  @SubscribeMessage`cat /tmp/gateway_update.ts``).emit('gameEnded', {
+  @SubscribeMessage('makeMove')
+  async handleMakeMove(
+    @ConnectedSocket() client: Socket,
+    @MessageBody() data: { gameId: string; move: any },
+  ) {
+    const user = this.connectedUsers.get(client.id);
+    if (!user) return;
+
+    try {
+      const updatedGame = await this.gamesService.makeMove(
+        data.gameId,
+        data.move,
+        user.userId,
+      );
+      
+      // Broadcast the updated game state to all players in the game
+      this.server.to(`game_${data.gameId}`).emit('gameUpdated', updatedGame);
+      
+      // If game ended, broadcast the result
+      if (updatedGame.status === 'completed') {
+        this.server.to(`game_${data.gameId}`).emit('gameEnded', {
           result: updatedGame.result,
           winner: updatedGame.winner,
         });

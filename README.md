@@ -2,6 +2,13 @@
 
 A comprehensive game backend API built with NestJS, MongoDB, and WebSocket support for real-time gaming experiences.
 
+## 🎮 Full-Stack Solution
+
+This is the **backend** part of the Lila Game project. For frontend implementation:
+- 📖 See **[FRONTEND.md](FRONTEND.md)** for detailed frontend guide
+- 🚀 Run `./setup-frontend.sh` to create a React frontend automatically
+- 🌐 Compatible with React, Next.js, Vue, or any frontend framework
+
 ## Features
 
 - **User Authentication**: JWT-based authentication with registration and login
